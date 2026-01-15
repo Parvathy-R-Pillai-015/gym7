@@ -33,3 +33,25 @@ class UserLogin(models.Model):
     def check_password(self, raw_password):
         """Check if the provided password matches the stored hashed password"""
         return check_password(raw_password, self.password)
+
+
+class Trainer(models.Model):
+    """
+    Trainer model to store trainer-specific information
+    """
+    user = models.OneToOneField(UserLogin, on_delete=models.CASCADE, related_name='trainer_profile')
+    mobile = models.CharField(max_length=10, verbose_name="Mobile Number")
+    gender = models.CharField(max_length=10, verbose_name="Gender")
+    experience = models.IntegerField(verbose_name="Years of Experience")
+    specialization = models.CharField(max_length=100, verbose_name="Specialization")
+    joining_period = models.CharField(max_length=50, verbose_name="Joining Period")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Created At")
+    
+    class Meta:
+        db_table = 'trainer'
+        verbose_name = 'Trainer'
+        verbose_name_plural = 'Trainers'
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.user.name} - {self.specialization}"

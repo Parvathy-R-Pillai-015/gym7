@@ -140,19 +140,19 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   },
                 ),
                 _buildActionCard(
+                  'Add Trainer',
+                  Icons.person_add_alt_1,
+                  Colors.purple,
+                  () {
+                    Navigator.pushNamed(context, '/add-trainer');
+                  },
+                ),
+                _buildActionCard(
                   'View Reports',
                   Icons.assessment,
                   Colors.orange,
                   () {
                     // Navigate to reports
-                  },
-                ),
-                _buildActionCard(
-                  'Settings',
-                  Icons.settings,
-                  Colors.grey,
-                  () {
-                    // Navigate to settings
                   },
                 ),
               ],

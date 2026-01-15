@@ -2,7 +2,7 @@ from django.shortcuts import render
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 import json
-from .models import UserLogin
+from .models import UserLogin, Trainer
 
 # Create your views here.
 
@@ -132,3 +132,35 @@ def login_user(request):
         'success': False,
         'message': 'Only POST method is allowed'
     }, status=405)
+
+
+@csrf_exempt
+def create_trainer(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            name = data.get('name')
+            emailid = data.get('emailid')
+            mobile = data.get('mobile')
+            gender = data.get('gender')
+            experience = data.get('experience')
+            specialization = data.get('specialization')
+            joining_period = data.get('joining_period')
+            password = data.get('password')
+            
+            if not all([name, emailid, mobile, gender, experience, specialization, joining_period, password]):
+                return JsonResponse({'success': False, 'message': 'All fields are required'}, status=400)
+            
+            if UserLogin.objects.filter(emailid=emailid).exists():
+                return JsonResponse({'success': False, 'message': 'Email already exists'}, status=400)
+            
+            if len(mobile) != 10 or not mobile.isdigit():
+                return JsonResponse({'success': False, 'message': 'Mobile number must be 10 digits'}, status=400)
+            
+            user = UserLogin.objects.create(name=name, emailid=emailid, password=password, role='trainer')
+            trainer = Trainer.objects.create(user=user, mobile=mobile, gender=gender, experience=int(experience), specialization=specialization, joining_period=joining_period)
+            
+            return JsonResponse({'success': True, 'message': 'Trainer added successfully', 'trainer': {'id': trainer.id, 'name': user.name, 'emailid': user.emailid, 'mobile': trainer.mobile, 'specialization': trainer.specialization}}, status=201)
+        except Exception as e:
+            return JsonResponse({'success': False, 'message': str(e)}, status=500)
+    return JsonResponse({'success': False, 'message': 'Only POST method is allowed'}, status=405)
