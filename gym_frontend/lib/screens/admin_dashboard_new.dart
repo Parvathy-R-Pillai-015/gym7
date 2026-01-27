@@ -3,6 +3,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'trainer_management_tab.dart';
 import 'admin_chat_tab.dart';
+import 'add_recipe_screen.dart';
+import 'edit_recipe_screen.dart';
 
 class AdminDashboardNew extends StatefulWidget {
   const AdminDashboardNew({Key? key}) : super(key: key);
@@ -19,11 +21,16 @@ class _AdminDashboardNewState extends State<AdminDashboardNew> with SingleTicker
   List<Map<String, dynamic>> _paidUsers = [];
   List<Map<String, dynamic>> _unpaidUsers = [];
   List<Map<String, dynamic>> _allReviews = [];
+  List<Map<String, dynamic>> _allRecipes = [];
+  List<Map<String, dynamic>> _filteredRecipes = [];
+  Map<String, int> _recipeCounts = {'veg': 0, 'non_veg': 0, 'vegan': 0, 'other': 0};
+  String _recipeSearchQuery = '';
+  String _selectedFoodTypeFilter = 'all';
   
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 7, vsync: this);
     _loadAllData();
   }
   
@@ -37,6 +44,7 @@ class _AdminDashboardNewState extends State<AdminDashboardNew> with SingleTicker
       _loadPaidUsers(),
       _loadUnpaidUsers(),
       _loadAllReviews(),
+      _loadAllRecipes(),
     ]);
     
     setState(() {
@@ -139,6 +147,7 @@ class _AdminDashboardNewState extends State<AdminDashboardNew> with SingleTicker
             Tab(text: 'Unpaid Users'),
             Tab(text: 'Trainers'),
             Tab(text: 'Reviews'),
+            Tab(text: 'Recipes'),
             Tab(text: 'Chats'),
           ],
         ),
@@ -165,6 +174,7 @@ class _AdminDashboardNewState extends State<AdminDashboardNew> with SingleTicker
                 _buildUnpaidUsersTab(),
                 const TrainerManagementTab(),
                 _buildReviewsTab(),
+                _buildRecipesTab(),
                 const AdminChatTab(),
               ],
             ),
@@ -266,8 +276,16 @@ class _AdminDashboardNewState extends State<AdminDashboardNew> with SingleTicker
                     _buildDetailRow('Food Allergies', user['food_allergies'] ?? 'None'),
                     _buildDetailRow('Health Conditions', user['health_conditions'] ?? 'None'),
                     _buildDetailRow('Payment Method', user['payment_method'] ?? 'Not Recorded'),
+                    _buildDetailRow('Subscription Ends', _formatDate(user['subscription_end_date'])),
+                    _buildDetailRow('Remaining Days', user['remaining_days']?.toString()),
                     _buildTrainerDetailRow(user['assigned_trainer']),
-                    _buildDetailRow('Payment Date', user['payment_date']),
+                    _buildDetailRow('Payment Date', _formatDateTime(user['payment_date'])),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Renewal History',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    _buildRenewalsSection(user['renewals']),
                   ],
                 ),
               ),
@@ -348,6 +366,58 @@ class _AdminDashboardNewState extends State<AdminDashboardNew> with SingleTicker
         ],
       ),
     );
+  }
+
+  Widget _buildRenewalsSection(List<dynamic>? renewals) {
+    if (renewals == null || renewals.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Text('No renewals recorded', style: TextStyle(color: Colors.grey[700])),
+      );
+    }
+    return Column(
+      children: renewals.map((r) {
+        return Container(
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.green[50],
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.green[200]!),
+          ),
+          child: Row(
+            children: [
+              Expanded(child: Text('Date: ${r['renewed_at']}')),
+              Expanded(child: Text('Months: ${r['months']}')),
+              Expanded(child: Text('Amount: ₹${r['amount']}')),
+              Expanded(child: Text('Method: ${r['payment_method']}')),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  String? _formatDate(dynamic value) {
+    if (value == null) return null;
+    try {
+      final parsed = DateTime.parse(value.toString());
+      return '${parsed.year}-${parsed.month.toString().padLeft(2, '0')}-${parsed.day.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return value.toString();
+    }
+  }
+
+  String? _formatDateTime(dynamic value) {
+    if (value == null) return null;
+    try {
+      final parsed = DateTime.parse(value.toString());
+      final date = '${parsed.year}-${parsed.month.toString().padLeft(2, '0')}-${parsed.day.toString().padLeft(2, '0')}';
+      final time = '${parsed.hour.toString().padLeft(2, '0')}:${parsed.minute.toString().padLeft(2, '0')}';
+      return '$date $time';
+    } catch (_) {
+      return value.toString();
+    }
   }
   
   Widget _buildTrainerDetailRow(dynamic trainer) {
@@ -553,6 +623,378 @@ class _AdminDashboardNewState extends State<AdminDashboardNew> with SingleTicker
             ),
           ),
         ],
+      ),
+    );
+  }
+  
+  Future<void> _loadAllRecipes() async {
+    try {
+      final response = await http.get(
+        Uri.parse('http://127.0.0.1:8000/api/recipes/all/'),
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success']) {
+          setState(() {
+            _allRecipes = List<Map<String, dynamic>>.from(data['recipes']);
+            _filteredRecipes = _allRecipes;
+            _updateRecipeCounts();
+          });
+        }
+      }
+    } catch (e) {
+      print('Error loading recipes: $e');
+    }
+  }
+
+  void _updateRecipeCounts() {
+    _recipeCounts = {
+      'veg': _allRecipes.where((r) => r['food_type'] == 'veg').length,
+      'non_veg': _allRecipes.where((r) => r['food_type'] == 'non_veg').length,
+      'vegan': _allRecipes.where((r) => r['food_type'] == 'vegan').length,
+      'other': _allRecipes.where((r) => r['food_type'] == 'other').length,
+    };
+  }
+
+  void _filterRecipes() {
+    setState(() {
+      _filteredRecipes = _allRecipes.where((recipe) {
+        final matchesSearch = recipe['name']
+            .toString()
+            .toLowerCase()
+            .contains(_recipeSearchQuery.toLowerCase());
+        final matchesType = _selectedFoodTypeFilter == 'all' ||
+            recipe['food_type'] == _selectedFoodTypeFilter;
+        return matchesSearch && matchesType;
+      }).toList();
+    });
+  }
+
+  Future<void> _deleteRecipe(int recipeId, String recipeName) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Recipe?'),
+        content: Text('Are you sure you want to delete "$recipeName"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        final response = await http.delete(
+          Uri.parse('http://127.0.0.1:8000/api/recipes/$recipeId/delete/'),
+        );
+
+        if (response.statusCode == 200) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('$recipeName deleted successfully')),
+          );
+          _loadAllRecipes();
+        }
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error deleting recipe: $e')),
+        );
+      }
+    }
+  }
+  
+  Widget _buildRecipesTab() {
+    final foodTypeColors = {
+      'veg': Colors.green,
+      'non_veg': Colors.red,
+      'vegan': Colors.orange,
+      'other': Colors.blue,
+    };
+
+    return Column(
+      children: [
+        // Add Recipe Button
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: ElevatedButton.icon(
+            onPressed: () async {
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const AddRecipeScreen(),
+                ),
+              );
+              if (result == true) {
+                _loadAllRecipes();
+              }
+            },
+            icon: const Icon(Icons.add),
+            label: const Text('Add New Recipe'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF7B4EFF),
+              foregroundColor: Colors.white,
+              minimumSize: const Size(double.infinity, 48),
+            ),
+          ),
+        ),
+
+        // Recipe Count Cards
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildCountCard('Veg', _recipeCounts['veg'] ?? 0, Colors.green),
+                const SizedBox(width: 12),
+                _buildCountCard(
+                    'Non-Veg', _recipeCounts['non_veg'] ?? 0, Colors.red),
+                const SizedBox(width: 12),
+                _buildCountCard('Vegan', _recipeCounts['vegan'] ?? 0, Colors.orange),
+                const SizedBox(width: 12),
+                _buildCountCard('Other', _recipeCounts['other'] ?? 0, Colors.blue),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Search Bar
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: TextField(
+            onChanged: (value) {
+              _recipeSearchQuery = value;
+              _filterRecipes();
+            },
+            decoration: InputDecoration(
+              hintText: 'Search recipes...',
+              prefixIcon: const Icon(Icons.search),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Food Type Filter
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildFilterChip('All', 'all'),
+                const SizedBox(width: 8),
+                _buildFilterChip('Veg', 'veg'),
+                const SizedBox(width: 8),
+                _buildFilterChip('Non-Veg', 'non_veg'),
+                const SizedBox(width: 8),
+                _buildFilterChip('Vegan', 'vegan'),
+                const SizedBox(width: 8),
+                _buildFilterChip('Other', 'other'),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Recipes List
+        Expanded(
+          child: _filteredRecipes.isEmpty
+              ? Center(
+                  child: Text(_allRecipes.isEmpty
+                      ? 'No recipes added yet'
+                      : 'No recipes match your search'),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: _filteredRecipes.length,
+                  itemBuilder: (context, index) {
+                    final recipe = _filteredRecipes[index];
+                    final foodType = recipe['food_type'] ?? 'unknown';
+                    final color = foodTypeColors[foodType] ?? Colors.grey;
+
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: ExpansionTile(
+                        title: Row(
+                          children: [
+                            Container(
+                              width: 12,
+                              height: 12,
+                              decoration: BoxDecoration(
+                                color: color,
+                                shape: BoxShape.circle,
+                              ),
+                              margin: const EdgeInsets.only(right: 12),
+                            ),
+                            Expanded(
+                              child: Text(
+                                recipe['name'] ?? 'Unnamed Recipe',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        subtitle: Text(
+                          foodType.replaceAll('_', ' ').toUpperCase(),
+                          style: TextStyle(
+                            color: color,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                          ),
+                        ),
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Ingredients:',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  recipe['ingredients'] ?? 'N/A',
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                                const SizedBox(height: 16),
+                                const Text(
+                                  'Instructions:',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  recipe['instructions'] ?? 'N/A',
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'Created: ${recipe['created_at']?.split('T')[0] ?? 'N/A'}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                // Edit and Delete Buttons
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    ElevatedButton.icon(
+                                      onPressed: () async {
+                                        final result = await Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) =>
+                                                EditRecipeScreen(
+                                              recipeId: recipe['id'],
+                                              initialName: recipe['name'],
+                                              initialIngredients:
+                                                  recipe['ingredients'],
+                                              initialInstructions:
+                                                  recipe['instructions'],
+                                              initialFoodType: recipe['food_type'],
+                                            ),
+                                          ),
+                                        );
+                                        if (result == true) {
+                                          _loadAllRecipes();
+                                        }
+                                      },
+                                      icon: const Icon(Icons.edit, size: 16),
+                                      label: const Text('Edit'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.blue,
+                                        foregroundColor: Colors.white,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    ElevatedButton.icon(
+                                      onPressed: () => _deleteRecipe(
+                                        recipe['id'],
+                                        recipe['name'],
+                                      ),
+                                      icon: const Icon(Icons.delete, size: 16),
+                                      label: const Text('Delete'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.red,
+                                        foregroundColor: Colors.white,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCountCard(String label, int count, Color color) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Column(
+          children: [
+            Text(
+              label,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              count.toString(),
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterChip(String label, String value) {
+    return FilterChip(
+      label: Text(label),
+      selected: _selectedFoodTypeFilter == value,
+      onSelected: (selected) {
+        setState(() {
+          _selectedFoodTypeFilter = value;
+          _filterRecipes();
+        });
+      },
+      backgroundColor: Colors.grey[200],
+      selectedColor: const Color(0xFF7B4EFF),
+      labelStyle: TextStyle(
+        color: _selectedFoodTypeFilter == value ? Colors.white : Colors.black,
       ),
     );
   }

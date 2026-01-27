@@ -18,7 +18,7 @@ from django.contrib import admin
 from django.urls import path
 from django.conf import settings
 from django.conf.urls.static import static
-from users import views, admin_views, food_views, trainer_food_views
+from users import views, admin_views, food_views, trainer_food_views, subscription_views, recipe_views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -78,10 +78,22 @@ urlpatterns = [
     path('api/trainer/food/user/daily/', trainer_food_views.trainer_get_user_daily_calories, name='trainer_get_user_daily_calories'),
     path('api/trainer/food/user/history/', trainer_food_views.trainer_get_user_calorie_history, name='trainer_get_user_calorie_history'),
     
+    # Subscription APIs
+    path('api/subscription/status/<int:user_id>/', subscription_views.get_subscription_status, name='get_subscription_status'),
+    path('api/subscription/renew/', subscription_views.renew_subscription, name='renew_subscription'),
+    
     # Admin APIs
     path('api/admin/users/all/', admin_views.get_all_users, name='get_all_users'),
     path('api/admin/users/paid/', admin_views.get_paid_users, name='get_paid_users'),
     path('api/admin/users/unpaid/', admin_views.get_unpaid_users, name='get_unpaid_users'),
+    
+    # Recipe APIs
+    path('api/recipes/add/', recipe_views.add_recipe, name='add_recipe'),
+    path('api/recipes/user/<int:user_id>/', recipe_views.get_recipes, name='get_recipes'),
+    path('api/recipes/all/', recipe_views.get_all_recipes, name='get_all_recipes'),
+    path('api/recipes/count/', recipe_views.get_recipe_count, name='get_recipe_count'),
+    path('api/recipes/<int:recipe_id>/update/', recipe_views.update_recipe, name='update_recipe'),
+    path('api/recipes/<int:recipe_id>/delete/', recipe_views.delete_recipe, name='delete_recipe'),
     
     # Trainer management - specific paths before generic patterns
     path('api/admin/trainers/create/', admin_views.create_trainer, name='admin_create_trainer'),

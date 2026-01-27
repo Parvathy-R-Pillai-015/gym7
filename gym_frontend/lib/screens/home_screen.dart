@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'workout_videos_screen.dart';
 import 'chat_screen.dart';
 import 'food_calorie_calculator_screen.dart';
+import 'subscription_renewal_screen.dart';
+import 'food_recipes_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final int userId;
@@ -27,6 +29,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _canRequestToday = true;
   Map<String, dynamic>? _dietPlan;
   bool _hasDietPlan = false;
+  Map<String, dynamic>? _subscriptionStatus;
+  bool _subscriptionLoading = false;
 
   @override
   void initState() {
@@ -34,6 +38,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadUserProfile();
     _loadAttendance();
     _loadDietPlan();
+    _loadSubscriptionStatus();
   }
 
   Future<void> _loadUserProfile() async {
@@ -118,6 +123,28 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     } catch (e) {
       print('Error loading diet plan: $e');
+    }
+  }
+
+  Future<void> _loadSubscriptionStatus() async {
+    setState(() => _subscriptionLoading = true);
+    try {
+      final response = await http.get(
+        Uri.parse('http://127.0.0.1:8000/api/subscription/status/${widget.userId}/'),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          setState(() {
+            _subscriptionStatus = data['subscription'];
+            _subscriptionLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      print('Error loading subscription status: $e');
+      setState(() => _subscriptionLoading = false);
     }
   }
 
@@ -531,6 +558,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 20),
                     _buildProfileCard(),
+                    const SizedBox(height: 20),
+                    _buildSubscriptionCard(),
                     const SizedBox(height: 30),
                     const Text(
                       'Quick Actions',
@@ -541,77 +570,92 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    SizedBox(
-                      height: 200,
-                      child: GridView.count(
-                        crossAxisCount: 2,
-                        crossAxisSpacing: 20,
-                        mainAxisSpacing: 20,
-                        physics: const NeverScrollableScrollPhysics(),
-                        children: [
-                          _buildActionCard(
-                            'Chat with Trainer',
-                            Icons.chat_bubble,
-                            const Color(0xFF4CAF50),
-                            () {
-                              if (_userProfile != null && _userProfile!['assigned_trainer'] != null) {
-                                final trainer = _userProfile!['assigned_trainer'];
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => ChatScreen(
-                                      userId: _userProfile!['user_id'],
-                                      trainerId: trainer['id'],
-                                      trainerName: trainer['name'] ?? 'Trainer',
-                                      senderType: 'user',
-                                    ),
-                                  ),
-                                );
-                              } else {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('No trainer assigned yet'),
-                                    backgroundColor: Colors.red,
-                                  ),
-                                );
-                              }
-                            },
-                          ),
-                          _buildActionCard(
-                            'Food Calorie Calculator',
-                            Icons.fastfood,
-                            const Color(0xFF4ECDC4),
-                            () {
+                    GridView.count(
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 20,
+                      mainAxisSpacing: 20,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      children: [
+                        _buildActionCard(
+                          'Chat with Trainer',
+                          Icons.chat_bubble,
+                          const Color(0xFF4CAF50),
+                          () {
+                            if (_userProfile != null && _userProfile!['assigned_trainer'] != null) {
+                              final trainer = _userProfile!['assigned_trainer'];
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => FoodCalorieCalculatorScreen(
-                                    userId: widget.userId,
-                                    userName: widget.userName,
+                                  builder: (context) => ChatScreen(
+                                    userId: _userProfile!['user_id'],
+                                    trainerId: trainer['id'],
+                                    trainerName: trainer['name'] ?? 'Trainer',
+                                    senderType: 'user',
                                   ),
                                 ),
                               );
-                            },
-                          ),
-                          _buildWorkoutCard(
-                            'Stretching',
-                            Icons.accessibility_new,
-                            const Color(0xFFFFBE0B),
-                          ),
-                          _buildActionCard(
-                            'My Progress',
-                            Icons.trending_up,
-                            const Color(0xFF9C27B0),
-                            () {
+                            } else {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
-                                  content: Text('Progress tracking coming soon!'),
+                                  content: Text('No trainer assigned yet'),
+                                  backgroundColor: Colors.red,
                                 ),
                               );
-                            },
-                          ),
-                        ],
-                      ),
+                            }
+                          },
+                        ),
+                        _buildActionCard(
+                          'Food Calorie Calculator',
+                          Icons.fastfood,
+                          const Color(0xFF4ECDC4),
+                          () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => FoodCalorieCalculatorScreen(
+                                  userId: widget.userId,
+                                  userName: widget.userName,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        _buildActionCard(
+                          'Healthy Food Recipes',
+                          Icons.restaurant,
+                          const Color(0xFF4CAF50),
+                          () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => FoodRecipesScreen(
+                                  userId: widget.userId,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        _buildActionCard(
+                          'Renew Subscription',
+                          Icons.card_membership,
+                          const Color(0xFF9C27B0),
+                          () async {
+                            final result = await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => SubscriptionRenewalScreen(
+                                  userId: widget.userId,
+                                  userName: widget.userName,
+                                ),
+                              ),
+                            );
+                            if (result == true) {
+                              _loadSubscriptionStatus();
+                            }
+                          },
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -1142,6 +1186,190 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSubscriptionCard() {
+    if (_subscriptionLoading) {
+      return Card(
+        child: const Padding(
+          padding: EdgeInsets.all(20),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    if (_subscriptionStatus == null) {
+      return const SizedBox.shrink();
+    }
+
+    final isActive = _subscriptionStatus!['is_active'] ?? false;
+    final isExpired = _subscriptionStatus!['is_expired'] ?? false;
+    final expiringSoon = _subscriptionStatus!['expiring_soon'] ?? false;
+    final remainingDays = _subscriptionStatus!['remaining_days'] ?? 0;
+    final canRenew = _subscriptionStatus!['can_renew'] ?? false;
+
+    Color cardColor;
+    Color statusColor;
+    String statusText;
+
+    if (isActive && !expiringSoon) {
+      cardColor = Colors.green.withOpacity(0.05);
+      statusColor = Colors.green;
+      statusText = 'Active';
+    } else if (expiringSoon) {
+      cardColor = Colors.orange.withOpacity(0.05);
+      statusColor = Colors.orange;
+      statusText = 'Expiring Soon';
+    } else {
+      cardColor = Colors.red.withOpacity(0.05);
+      statusColor = Colors.red;
+      statusText = isExpired ? 'Expired' : 'Inactive';
+    }
+
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      color: cardColor,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.card_membership, color: statusColor, size: 28),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Subscription Status',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        statusText,
+                        style: TextStyle(
+                          color: statusColor,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: statusColor,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    isActive ? '$remainingDays days left' : 'Renew Now',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (isActive) ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'End Date',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 12,
+                          ),
+                        ),
+                        Text(
+                          _subscriptionStatus!['subscription_end_date']
+                                  ?.split('T')[0] ??
+                              'N/A',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (canRenew || expiringSoon)
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          final result = await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  SubscriptionRenewalScreen(
+                                userId: widget.userId,
+                                userName: widget.userName,
+                              ),
+                            ),
+                          );
+                          if (result == true) {
+                            _loadSubscriptionStatus();
+                          }
+                        },
+                        icon: const Icon(Icons.refresh, size: 16),
+                        label: const Text('Renew'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: statusColor,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 8),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ] else ...[
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    final result = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => SubscriptionRenewalScreen(
+                          userId: widget.userId,
+                          userName: widget.userName,
+                        ),
+                      ),
+                    );
+                    if (result == true) {
+                      _loadSubscriptionStatus();
+                    }
+                  },
+                  icon: const Icon(Icons.card_membership),
+                  label: const Text('Renew Subscription'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

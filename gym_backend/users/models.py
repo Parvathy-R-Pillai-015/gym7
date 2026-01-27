@@ -121,6 +121,9 @@ class UserProfile(models.Model):
     payment_status = models.BooleanField(default=False, verbose_name="Payment Status")
     payment_amount = models.IntegerField(default=0, verbose_name="Payment Amount")
     payment_method = models.CharField(max_length=20, blank=True, null=True, verbose_name="Payment Method")
+    payment_date = models.DateTimeField(null=True, blank=True, verbose_name="Last Payment Date")
+    subscription_start_date = models.DateTimeField(null=True, blank=True, verbose_name="Subscription Start Date")
+    subscription_end_date = models.DateTimeField(null=True, blank=True, verbose_name="Subscription End Date")
     assigned_trainer = models.ForeignKey('Trainer', on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_users', verbose_name="Assigned Trainer")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Created At")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Updated At")
@@ -146,15 +149,19 @@ class UserProfile(models.Model):
         return payment_map.get(self.target_months, 0)
     
     def get_remaining_days(self):
-        """Calculate remaining days from plan start date"""
-        from datetime import timedelta
+        """Calculate remaining days from subscription end date"""
         from django.utils import timezone
-        if self.payment_status and self.updated_at:
-            plan_start = self.updated_at
-            plan_end = plan_start + timedelta(days=self.target_months * 30)
-            remaining = (plan_end - timezone.now()).days
+        if self.subscription_end_date:
+            remaining = (self.subscription_end_date - timezone.now()).days
             return max(0, remaining)
-        return self.target_months * 30
+        return 0
+    
+    def is_subscription_active(self):
+        """Check if subscription is currently active"""
+        from django.utils import timezone
+        if self.subscription_end_date:
+            return self.subscription_end_date > timezone.now()
+        return False
     
     def calculate_target_calories(self):
         """
@@ -252,11 +259,50 @@ class Attendance(models.Model):
         db_table = 'attendance'
         verbose_name = 'Attendance'
         verbose_name_plural = 'Attendances'
-        ordering = ['-date']
-        unique_together = ['user', 'date']
+
+
+class SubscriptionRenewal(models.Model):
+    """Tracks subscription renewals for auditing"""
+    user = models.ForeignKey(UserLogin, on_delete=models.CASCADE, related_name='subscription_renewals')
+    months = models.IntegerField(verbose_name="Renewal Months")
+    amount = models.IntegerField(verbose_name="Renewal Amount")
+    payment_method = models.CharField(max_length=20, blank=True, null=True, verbose_name="Payment Method")
+    renewed_at = models.DateTimeField(auto_now_add=True, verbose_name="Renewed At")
+
+    class Meta:
+        db_table = 'subscription_renewal'
+        verbose_name = 'Subscription Renewal'
+        verbose_name_plural = 'Subscription Renewals'
+        ordering = ['-renewed_at']
     
     def __str__(self):
-        return f"{self.user.name} - {self.date} ({self.status})"
+        return f"{self.user.name} - {self.months}m ₹{self.amount} on {self.renewed_at.strftime('%Y-%m-%d')}"
+
+
+class FoodRecipe(models.Model):
+    """Store healthy food recipes for users"""
+    FOOD_TYPE_CHOICES = [
+        ('veg', 'Vegetarian'),
+        ('non_veg', 'Non-Vegetarian'),
+        ('vegan', 'Vegan'),
+        ('other', 'Other'),
+    ]
+    
+    name = models.CharField(max_length=255, verbose_name="Recipe Name")
+    ingredients = models.TextField(verbose_name="Ingredients (comma-separated or newline-separated)")
+    instructions = models.TextField(verbose_name="Instructions")
+    food_type = models.CharField(max_length=20, choices=FOOD_TYPE_CHOICES, verbose_name="Food Type")
+    created_by = models.ForeignKey(UserLogin, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_recipes', verbose_name="Created By")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Created At")
+    
+    class Meta:
+        db_table = 'food_recipe'
+        verbose_name = 'Food Recipe'
+        verbose_name_plural = 'Food Recipes'
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.name} ({self.get_food_type_display()})"
 
 
 class Review(models.Model):

@@ -78,8 +78,7 @@ WSGI_APPLICATION = 'gym_backend.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.m'
-        'ysql',
+        'ENGINE': 'django.db.backends.mysql',
         'NAME': 'db_gym',
         'USER': 'root',
         'PASSWORD': 'root123',
@@ -124,7 +123,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Kolkata'
 
 USE_I18N = True
 

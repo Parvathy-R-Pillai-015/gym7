@@ -6,8 +6,7 @@ from django.core.files.base import ContentFile
 from django.utils import timezone
 import json
 from datetime import datetime, timedelta, date
-from dateutil.relativedelta import relativedelta
-from .models import UserLogin, Trainer, UserProfile, Attendance, Review, FoodItem, DietPlanTemplate, UserDietPlan, WorkoutVideo, VideoRecommendation, ChatMessage, FoodEntry
+from .models import UserLogin, Trainer, UserProfile, Attendance, Review, FoodItem, DietPlanTemplate, UserDietPlan, WorkoutVideo, VideoRecommendation, ChatMessage, FoodEntry, SubscriptionRenewal
 
 # Create your views here.
 
@@ -402,9 +401,12 @@ def get_profile(request, user_id):
 
 @csrf_exempt
 def update_payment_status(request):
-    """Update payment status after successful payment"""
+    """Update payment status after successful payment - sets subscription dates"""
     if request.method == 'POST':
         try:
+            from datetime import timedelta
+            from django.utils import timezone
+            
             data = json.loads(request.body)
             user_id = data.get('user_id')
             payment_status = data.get('payment_status', True)
@@ -420,14 +422,39 @@ def update_payment_status(request):
             user = UserLogin.objects.get(id=user_id)
             profile = UserProfile.objects.get(user=user)
             profile.payment_status = payment_status
+            
             if payment_method:
                 profile.payment_method = payment_method
+            
+            # Set subscription dates when payment is made
+            if payment_status:
+                now = timezone.now()
+                profile.subscription_start_date = now
+                profile.payment_date = now
+                # Add target_months to current date (using 30 days per month)
+                profile.subscription_end_date = now + timedelta(days=profile.target_months * 30)
+            
             profile.save()
+
+            # Record initial payment as a renewal entry for auditability
+            if payment_status:
+                try:
+                    amount = profile.payment_amount or profile.calculate_payment_amount()
+                    SubscriptionRenewal.objects.create(
+                        user=user,
+                        months=profile.target_months,
+                        amount=amount,
+                        payment_method=payment_method or None,
+                    )
+                except Exception:
+                    # Non-blocking: if history creation fails, still return success
+                    pass
             
             return JsonResponse({
                 'success': True,
                 'message': 'Payment status updated successfully',
-                'payment_status': profile.payment_status
+                'payment_status': profile.payment_status,
+                'subscription_end_date': profile.subscription_end_date.isoformat() if profile.subscription_end_date else None
             }, status=200)
             
         except UserLogin.DoesNotExist:
@@ -496,6 +523,10 @@ def get_trainer_users(request, trainer_id):
                     'target_weight': profile.target_weight,
                     'target_months': profile.target_months,
                     'remaining_days': remaining_days,
+                    'subscription_start_date': profile.subscription_start_date.isoformat() if profile.subscription_start_date else None,
+                    'subscription_end_date': profile.subscription_end_date.isoformat() if profile.subscription_end_date else None,
+                    'subscription_status': 'active' if profile.is_subscription_active() else 'expired',
+                    'payment_date': profile.payment_date.isoformat() if profile.payment_date else None,
                     'workout_time': profile.workout_time,
                     'diet_preference': profile.diet_preference,
                     'food_allergies': profile.food_allergies or '',
@@ -817,7 +848,7 @@ def create_review(request):
             
             # Check if user already posted review this month
             from django.utils import timezone
-            one_month_ago = timezone.now() - relativedelta(months=1)
+            one_month_ago = timezone.now() - timedelta(days=30)
             recent_review = Review.objects.filter(
                 user=user,
                 trainer=profile.assigned_trainer,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:intl/intl.dart';
@@ -97,10 +98,8 @@ class _FoodCalorieCalculatorScreenState
           final results = List<Map<String, dynamic>>.from(data['foods'] ?? []);
           setState(() {
             _foodSearchResults = results;
-            // Auto-enable custom mode if no results found
-            if (results.isEmpty && query.isNotEmpty) {
-              _isCustomFood = true;
-            }
+            // Auto-enable custom mode if no results found; reset when results exist
+            _isCustomFood = results.isEmpty && query.isNotEmpty;
           });
         }
       }
@@ -116,6 +115,14 @@ class _FoodCalorieCalculatorScreenState
     if (_quantityController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter quantity')),
+      );
+      return;
+    }
+
+    final quantity = double.tryParse(_quantityController.text);
+    if (quantity == null || quantity <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a valid quantity')),
       );
       return;
     }
@@ -144,7 +151,7 @@ class _FoodCalorieCalculatorScreenState
       // Build request body
       Map<String, dynamic> requestBody = {
         'user_id': widget.userId,
-        'quantity': double.parse(_quantityController.text),
+        'quantity': quantity,
         'quantity_unit': _selectedQuantityUnit,
         'meal_type': _selectedMealType,
         'entry_date': dateStr,
@@ -494,6 +501,7 @@ class _FoodCalorieCalculatorScreenState
                         _selectedFoodId = food['id'];
                         _selectedFoodName = food['name'];
                         _selectedFoodItem = food;
+                        _isCustomFood = false;
                         _foodSearchController.clear();
                         _foodSearchResults = [];
                       });
@@ -538,6 +546,9 @@ class _FoodCalorieCalculatorScreenState
                 child: TextField(
                   controller: _quantityController,
                   keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                  ],
                   decoration: InputDecoration(
                     hintText: 'Quantity',
                     border: OutlineInputBorder(

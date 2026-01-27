@@ -1,8 +1,9 @@
 from django.shortcuts import render
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from django.utils import timezone
 import json
-from .models import UserLogin, Trainer, UserProfile
+from .models import UserLogin, Trainer, UserProfile, SubscriptionRenewal
 
 # Admin API Views
 
@@ -18,6 +19,7 @@ def get_all_users(request):
                 try:
                     profile = UserProfile.objects.get(user=user)
                     trainer_name = profile.assigned_trainer.user.name if profile.assigned_trainer else None
+                    remaining_days = profile.get_remaining_days() if profile.payment_status else 0
                     user_data = {
                         'id': user.id,
                         'name': user.name,
@@ -30,6 +32,10 @@ def get_all_users(request):
                         'payment_amount': profile.payment_amount,
                         'payment_method': profile.payment_method,
                         'assigned_trainer': trainer_name,
+                        'subscription_start_date': profile.subscription_start_date.isoformat() if profile.subscription_start_date else None,
+                        'subscription_end_date': profile.subscription_end_date.isoformat() if profile.subscription_end_date else None,
+                        'subscription_status': 'active' if profile.is_subscription_active() else 'expired',
+                        'remaining_days': remaining_days,
                         'created_at': user.created_at.strftime('%Y-%m-%d %H:%M:%S')
                     }
                 except UserProfile.DoesNotExist:
@@ -95,6 +101,7 @@ def get_paid_users(request):
                         'goal_category': trainer.goal_category
                     }
                 
+                remaining_days = profile.get_remaining_days()
                 user_data = {
                     'id': user.id,
                     'name': user.name,
@@ -114,9 +121,24 @@ def get_paid_users(request):
                     'payment_amount': profile.payment_amount,
                     'payment_method': profile.payment_method or 'Not Recorded',
                     'assigned_trainer': trainer_data,
-                    'payment_date': profile.updated_at.strftime('%Y-%m-%d %H:%M:%S'),
-                    'joined_date': user.created_at.strftime('%Y-%m-%d')
+                    'subscription_start_date': profile.subscription_start_date.isoformat() if profile.subscription_start_date else None,
+                    'subscription_end_date': profile.subscription_end_date.isoformat() if profile.subscription_end_date else None,
+                    'subscription_status': 'active' if profile.is_subscription_active() else 'expired',
+                    'remaining_days': remaining_days,
+                    'payment_date': timezone.localtime(profile.payment_date).strftime('%Y-%m-%d %H:%M:%S') if profile.payment_date else timezone.localtime(profile.updated_at).strftime('%Y-%m-%d %H:%M:%S'),
+                    'joined_date': timezone.localtime(user.created_at).strftime('%Y-%m-%d')
                 }
+                # Include recent renewal history
+                renewals = SubscriptionRenewal.objects.filter(user=user).order_by('-renewed_at')[:5]
+                user_data['renewals'] = [
+                    {
+                        'months': r.months,
+                        'amount': r.amount,
+                        'payment_method': r.payment_method or 'Not Recorded',
+                        'renewed_at': timezone.localtime(r.renewed_at).strftime('%Y-%m-%d %H:%M:%S'),
+                    }
+                    for r in renewals
+                ]
                 user_list.append(user_data)
             
             return JsonResponse({
