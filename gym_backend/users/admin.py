@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import UserLogin, Trainer, WorkoutVideo, ChatMessage
+from .models import UserLogin, Trainer, WorkoutVideo, ChatMessage, FoodRecipe
 
 # Register your models here.
 
@@ -106,6 +106,27 @@ class ChatMessageAdmin(admin.ModelAdmin):
         }),
         ('Message Details', {
             'fields': ('message', 'sender_type', 'is_read')
+        }),
+        ('Timestamp', {
+            'fields': ('created_at',),
+            'classes': ('collapse',)
+        }),
+    )
+
+@admin.register(FoodRecipe)
+class FoodRecipeAdmin(admin.ModelAdmin):
+    list_display = ('id', 'name', 'food_type', 'created_by', 'created_at')
+    list_filter = ('food_type', 'created_at')
+    search_fields = ('name', 'ingredients', 'instructions')
+    readonly_fields = ('created_at',)
+    ordering = ('-created_at',)
+    
+    fieldsets = (
+        ('Recipe Information', {
+            'fields': ('name', 'food_type', 'created_by')
+        }),
+        ('Recipe Details', {
+            'fields': ('ingredients', 'instructions')
         }),
         ('Timestamp', {
             'fields': ('created_at',),
